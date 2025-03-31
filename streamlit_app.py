@@ -2,58 +2,65 @@ import streamlit as st
 import openai
 from PIL import Image
 
-# 安全读取 API Key & Assistant ID
+# ✅ 配置 OpenAI
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 assistant_id = st.secrets["ASSISTANT_ID"]
 
 # ✅ 页面设置
-st.set_page_config(page_title="Bohan's Career Assistant")
+st.set_page_config(page_title="Bohan Yue's AI Career Assistant")
 st.title("🤖 Bohan Yue's AI Career Assistant")
 
-# ✅ 可选自定义头像（确保文件存在）
+# ✅ 加载头像（本地图片路径）
 try:
     user_avatar = Image.open("images/bohan_avatar.png")
-    assistant_avatar = Image.open("images/assistant_avatar.png")
 except:
     user_avatar = None
+
+try:
+    assistant_avatar = Image.open("images/assistant_avatar.png")
+except:
     assistant_avatar = None
 
-# ✅ 初始化 Thread 和历史消息
+# ✅ 初始化 thread 和聊天记录
 if "thread_id" not in st.session_state:
     thread = openai.beta.threads.create()
     st.session_state.thread_id = thread.id
     st.session_state.messages = []
 
-# ✅ 首次加载欢迎语
-if "welcome_shown" not in st.session_state:
+# ✅ 显示历史消息
+for message in st.session_state.messages:
+    with st.chat_message(message["role"], avatar=user_avatar if message["role"] == "user" else assistant_avatar):
+        st.markdown(message["content"])
+
+# ✅ Assistant 开场欢迎语（只显示一次）
+if not st.session_state.messages:
+    assistant_intro = "👋 Hi there! I’m Bohan’s AI career assistant. Feel free to ask me about his experience, skills, and fit for your role."
     with st.chat_message("assistant", avatar=assistant_avatar):
-        st.markdown("👋 Hi there! I’m Bohan’s AI career assistant. Feel free to ask me about his experience, skills, and fit for your role.")
-    st.session_state.welcome_shown = True
+        st.markdown(assistant_intro)
+    st.session_state.messages.append({"role": "assistant", "content": assistant_intro})
 
 # ✅ 聊天输入框
-user_input = st.chat_input("Ask me anything about Bohan...")
+user_input = st.chat_input("Ask anything about Bohan...")
 
 if user_input:
+    # 显示用户输入 + 存入历史
     st.session_state.messages.append({"role": "user", "content": user_input})
-
-    # 显示用户消息
     with st.chat_message("user", avatar=user_avatar):
         st.markdown(user_input)
 
-    # 给 OpenAI 发送消息
+    # 发消息到 Assistant
     openai.beta.threads.messages.create(
         thread_id=st.session_state.thread_id,
         role="user",
         content=user_input
     )
 
-    # 运行 Assistant
+    # 创建 Assistant 回应
     run = openai.beta.threads.runs.create(
         thread_id=st.session_state.thread_id,
         assistant_id=assistant_id
     )
 
-    # 等待回应完成
     with st.spinner("Thinking..."):
         while True:
             run_status = openai.beta.threads.runs.retrieve(
@@ -67,12 +74,9 @@ if user_input:
             thread_id=st.session_state.thread_id
         )
         assistant_reply = messages.data[0].content[0].text.value
-        st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
 
+        # 显示 Assistant 回复 + 存入历史
+        st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
         with st.chat_message("assistant", avatar=assistant_avatar):
             st.markdown(assistant_reply)
 
-# ✅ 展示历史聊天记录
-for message in st.session_state.messages:
-    with st.chat_message(message["role"], avatar=user_avatar if message["role"] == "user" else assistant_avatar):
-        st.markdown(message["content"])
